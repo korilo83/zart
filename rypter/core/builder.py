@@ -35,6 +35,18 @@ class CLIBuilder:
             with open(config_path, 'r') as f:
                 return json.load(f)
         return {}
+    def build_from_args(self, args_dict, log_callback=None):
+        config = {
+         'payload_path': args_dict['payload_path'],
+         'output_dir': args_dict['output_dir'],
+         'encryption_method': args_dict['encryption_method'],
+         'evasion_level': args_dict['evasion_level'],
+         'target_format': args_dict['target_format'],
+       }
+       dispatcher = BuildDispatcher(config, log_callback or print)
+       success, out = dispatcher.build_all()
+       return 0 if success else 1
+
 
     def build(self):
         """🏗️ Lance la génération complète"""
