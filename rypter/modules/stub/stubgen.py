@@ -23,6 +23,9 @@ class StubGenerator:
 
         exe_path = self.compiler.compile_stub(stub_path, output_dir)
         return exe_path
+        
+    def to_c_array(data):
+        return ', '.join([f'0x{b:02x}' for b in data])
 
     def _generate_random_names(self, count):
         return [''.join(random.choices(string.ascii_letters, k=random.randint(8, 14))) for _ in range(count)]
